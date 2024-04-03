@@ -30,11 +30,13 @@ To install the application, follow the steps below:
 ## Visuals
 ### Splash Screen
 ![Image](static/screenshot_01.png)
+
 The field labels are self explaining. This is the panel to be used for authenticating to ssh server running on remote PC.
 If any problem occurs during connection attempt, error details will be reported in the bottom right status bar.
 
 ### Remote Screen
 ![Image](static/screenshot_02.png)
+
 Description of the fields:
 1. Spawn Shell: This will spawn a command shell of the remote system.
 2. Consoles: After the first connection established to the remote system, serial consoles of the remote system are scanned and they are listed here. The listing is saved to cache for the further sessions.
@@ -43,8 +45,8 @@ Description of the fields:
 5. Local Networks: After the first connection established to the remote system, local networks of the remote system are scanned and they are listed here. The listing is saved to cache for the further sessions.
 6. Refresh Local Networks: This will rescan the serial local networks of the remote system.
 7. Found nodes: After the first connection established to the remote system, the selected local network will be scanned for possible live nodes. Since this may take some while, a confirmation is asked to user. If accepted, ping scanning will be started and responding IP addresses will be added to the list.
+
 ![Image](static/screenshot_03.png)
-   
 ### Spawned Command Shell
 ### Spawned Serial Console
 ## Contact
