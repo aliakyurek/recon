@@ -5,5 +5,5 @@ IF NOT DEFINED VIRTUAL_ENV (
     exit /b
 )
 
-pyinstaller --noconfirm --onedir --console --icon "static/app.ico"^
+pyinstaller --noconfirm --onefile --windowed --icon "static/app.ico"^
  --name "recon" --add-data "static;static" "main.py"

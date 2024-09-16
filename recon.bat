@@ -1,7 +1,7 @@
 @echo off
 
 REM Set the name of your virtual environment
-set VENV_NAME=myvenv
+set VENV_NAME=".venv"
 
 REM Set the path where the virtual environment will be created
 set VENV_PATH=%~dp0\%VENV_NAME%
