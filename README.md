@@ -1,5 +1,5 @@
 # ReCon
-Remote Connector aka "ReCon" is a GUI based tool used to connect to IP enabled devices attached to a remote system.
+Remote Connector aka "ReCon" is a GUI based tool (for windows on local/remote at the moment) used to connect to IP enabled devices attached to a remote system.
 
 ## Description
 If you're a developer, tester, or network engineer working home office, you're likely to have a server physically located in your work area and attached devices to it.
