@@ -5,4 +5,5 @@ build/
 dist/
 user/
 recon.spec
+recon.log
 launch.json

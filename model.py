@@ -10,10 +10,12 @@ import tempfile
 import os
 import pickle
 import util
-logger = logging.getLogger(__name__)
+
+logger = logging.getLogger("recon.model")
+# paramiko log level can be set to DEBUG for more detailed logging, otherwise it'll follow the root logger level
+# logging.getLogger("paramiko").setLevel(logging.DEBUG)
 
 strList = list[str]
-
 
 class ReCon:
     """
@@ -59,7 +61,6 @@ class ReCon:
             networks (list): A list of networks associated with the host.
             nodes (list): A list of nodes associated with the host.
         """
-        
         def __init__(self, address: str, username: str):
             self.address: str = address
             self.username: str = username
@@ -71,6 +72,7 @@ class ReCon:
     def __init__(self):
         # For some of SSH connections we'll use paramiko and for some we'll use subprocess and ssh util.
         self._ssh_client = paramiko.SSHClient()
+        self._sftp_client = None
         self._ssh_tunnel_proc = None
 
         # After connecting to a host using credentials, we'll generate a key and deploy it to the host for the further operations. 
@@ -116,7 +118,7 @@ class ReCon:
 
     def _activity(self, msg):
         """Log an activity message and call the activity handler."""
-        logger.debug(msg)
+        logger.info(msg)
         self._call_handler("activity", msg=msg)
 
     def _fill_prompt(self):
@@ -155,6 +157,7 @@ class ReCon:
         command = f'echo {key_name} {key} > C:\\Users\\{self.current_host.username}\\.ssh\\authorized_keys'
         out, err, code = self.execute_command(command)
 
+        
     def bind(self, event, handler):
         """Bind an event to a handler function."""
         self._event_handlers[event] = handler
@@ -163,7 +166,7 @@ class ReCon:
         # this doesn't do anything yet, but it's a good practice to have a start method
         self._call_handler("initialized")
 
-    def connect(self, host, username, password):
+    def _connect(self, host, username, password):
         """Connect to a host using SSH."""
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
@@ -196,12 +199,12 @@ class ReCon:
     def execute_command(self, command):
         """Run the command on the connected host and return the output, error, and exit code."""
         # SSH command execution code
-        logger.debug(f"Sending command via SSH: {command}")
+        logger.info(f"Sending command via SSH: {command}")
         stdin, stdout, stderr = self._ssh_client.exec_command(command)
         output = stdout.read().decode('utf-8')
         error = stderr.read().decode('utf-8')
         exit_code = stdout.channel.recv_exit_status()
-        logger.debug(f"Response: {output}")
+        logger.info(f"Response: {output}")
         return output, error, exit_code
 
     def clear_consoles(self):
@@ -276,7 +279,7 @@ class ReCon:
                 port_mapping[node] = local_port
 
             # execute ssh subprocess for tunneling                
-            self._ssh_tunnel_proc = subprocess.Popen(args, creationflags=subprocess.CREATE_NO_WINDOW)
+            self._ssh_tunnel_proc = subprocess.Popen(args)
             self._call_handler("tunnel_established", port_mapping=port_mapping)
         else:
             self._activity(f"Closing tunnel...")
@@ -286,35 +289,39 @@ class ReCon:
 
     def spawn_console(self, console):
         """Spawn a console for the specified console name like 'USB to UART Bridge (COM6)'"""
+        # grab the COMx part from the console name
         match = re.search(r"(COM\d+)", console)
-        title = f"ReConSole serial {match.group()} on {self.current_host.address}"
+        title = f"[ReCon]sole serial {match.group()} on {self.current_host.address}"
         
-        # our remote command is actually a powershell command that sets the window title and color and then runs the plink command
         # this is the plink command that connects to the serial port
-        post_post_ssh_cmd = f"plink -serial {match.group()} -sercfg 115200 8,n,1,X"
+        powershell_post_cmd = f"plink -serial {match.group()} -sercfg 115200 8,n,1,X"
         fcolor = "darkcyan"
 
-        # this is the powershell command and used as post connection command for ssh.
-        # this way we can set the window title and color before running the plink command
-        post_ssh_cmd = f'powershell -Command "$Host.UI.RawUI.WindowTitle = \'{title}\'; $Host.UI.RawUI.ForegroundColor = \'{fcolor}\'; {post_post_ssh_cmd}"'
-        start_cmd = f"ssh -t -i {self._key_file} {self.current_host.username}@{self.current_host.address} {post_ssh_cmd}"
-
-        # run this command in a new local shell window
-        os.system(f'start {start_cmd}')
+        args = [
+            # local
+            "ssh",
+            "-o StrictHostKeyChecking=no", "-t", "-i" , self._key_file, f"{self.current_host.username}@{self.current_host.address}",
+            # remote
+            # by using powershell as remote command we can set the window title and color before running the actual serial console utility
+             f'powershell -Command "$Host.UI.RawUI.WindowTitle = \'{title}\'; $Host.UI.RawUI.ForegroundColor = \'{fcolor}\'; {powershell_post_cmd}"'
+        ]
+        subprocess.Popen(args, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
     def spawn_shell(self):
-        title = f"ReConSole powershell on {self.current_host.address}"
+        title = f"[ReCon]sole powershell on {self.current_host.address}"
         fcolor = "green"
 
-        # this is the powershell command and used as post connection command for ssh.
-        # this way we can set the window title and color before running the shell
-        # by providing -NoExit, the shell will not exit after a command is executed
-        post_ssh_cmd = f'powershell -NoExit -Command "$Host.UI.RawUI.WindowTitle = \'{title}\'; $Host.UI.RawUI.ForegroundColor = \'{fcolor}\';"'
-        start_cmd = f"ssh -t -i {self._key_file} {self.current_host.username}@{self.current_host.address} {post_ssh_cmd}"
+        args = [
+            # local
+            "ssh",
+            "-o StrictHostKeyChecking=no", "-t", "-i" , self._key_file, f"{self.current_host.username}@{self.current_host.address}",
+            # remote
+            # by using powershell as remote command we can set the window title and color before running the shell
+            # by providing -NoExit, powershell will not exit and wait for user input
+            f'powershell -NoExit -Command "$Host.UI.RawUI.WindowTitle = \'{title}\'; $Host.UI.RawUI.ForegroundColor = \'{fcolor}\';"'
+        ]
+        subprocess.Popen(args, creationflags=subprocess.CREATE_NEW_CONSOLE)
         
-        # run this command in a new local shell window
-        os.system(f'start {start_cmd}')
-
     def stop(self):
         if self._ssh_client:
             self._ssh_client.close()
@@ -326,7 +333,7 @@ class ReCon:
         subprocess.run(['taskkill', '/f', '/fi', "WINDOWTITLE eq ReConSole*"])
 
     def setup(self, host, username, password):
-        connected, err = self.connect(host, username, password)
+        connected, err = self._connect(host, username, password)
         if not connected:
             self._call_handler("host_establishment", is_ok=False, error = err)
             return

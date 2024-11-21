@@ -4,7 +4,14 @@ from model import ReCon
 from CTkMessagebox import CTkMessagebox
 import webbrowser
 import os
+import logging
+import util
 
+# Set the default log level to INFO. Log file will be created in the same directory with the name recon.log
+logging.basicConfig(level=logging.INFO,  
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[ logging.FileHandler(util.get_dyn_path("recon.log"),mode='w')])
+logger = logging.getLogger("recon")
 
 class App:
     def __init__(self):
@@ -49,6 +56,7 @@ class App:
     def start(self):
         self.logic.start()
         self.ui.start()  # starts ui mainloop and doesn't return till exit click
+
 
     # Event handlers
     # app
@@ -201,6 +209,7 @@ class App:
         self.logic.toggle_https_tunnel()
 
 if __name__ == "__main__":
+    logger.info("Application started.")
     app = App()
     app.start()  # infinite loop till exit click
     app.on_stop()
