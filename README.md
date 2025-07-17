@@ -13,6 +13,12 @@ To install the application, follow the steps below:
 #### Local system
 - Python 3.12+ installed
 - **uv** package manager (recommended) OR pip package manager
+  ```bash
+  # Windows (PowerShell)
+  powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+  # or via pip
+  pip install uv
+  ```
 - openssh client installed
 - Internet connection to install dependencies
 
@@ -23,25 +29,31 @@ To install the application, follow the steps below:
 - putty (or just plink) in the remote system
 
 ### Steps
+#### Option 0: Zero hassle Setup (recommended)
+This is the simplest way to get started - `uv` automatically handles virtual environment creation, dependency
 
-#### Option 1: Quick Start with UV (Recommended)
+1.**Install from github** 
+```bash
+uv tool install recon --from git+https://github.com/aliakyurek/recon
+``` 
+
+That's it! The `uv tool install recon --from` command will:
+- Clone the repository
+- Create a virtual environment dedicated to the application)
+- Install all dependencies from `pyproject.toml`
+- Bundle the application as executable under `<your_user_directory>\.local\bin`
+- If this is in your PATH, you can run it from anywhere. Otherwise `uvx recon` will run the application.
+
+#### Option 1: Development Setup 
 This is the simplest way to get started - `uv` automatically handles virtual environment creation, dependency installation, and script execution:
 
-1. **Install uv** (if not already installed):
-```bash
-# Windows (PowerShell)
-powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-# or via pip
-pip install uv
-```
-
-2. **Clone the repository:**
+1.**Clone the repository:**
 ```bash
 git clone <repository_url>
 cd <project_directory>
 ```
 
-3. **Run the application:**
+2.**Run the application:**
 ```bash
 uv run recon
 ```
