@@ -1,0 +1,28 @@
+[project]
+name = "recon"
+version = "0.1.0"
+description = "Remote Connector - A GUI tool for managing remote devices via SSH"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ctklistbox==1.3",
+    "ctkmessagebox==2.5",
+    "customtkinter==5.2.2",
+    "paramiko==3.4.0",
+]
+
+[project.scripts]
+recon = "recon.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/recon"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/recon" = "recon"
+
+[tool.hatch.build.targets.wheel.shared-data]
+"src/recon/static" = "recon/static"

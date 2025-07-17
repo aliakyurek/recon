@@ -1,11 +1,12 @@
 from threading import Thread
-from ui import RcUI
-from model import ReCon
+from .ui import RcUI
+from .model import ReCon
 from CTkMessagebox import CTkMessagebox
 import webbrowser
 import os
 import logging
-import util
+from . import util
+
 
 # Set the default log level to INFO. Log file will be created in the same directory with the name recon.log
 logging.basicConfig(level=logging.INFO,  
@@ -86,7 +87,7 @@ class App:
         """Triggered when the model is doing some activity"""
         self.ui.set_status(msg)
 
-    def on_model_host_establishment(self, is_ok, error=None):
+    def on_model_host_establishment(self, is_ok, error=None, error_type=None):
         """Triggered when the model is trying to establish a connection with the host"""
         if is_ok:
             # if the connection is established, update the title with the current host info and show the devices frame
@@ -95,8 +96,15 @@ class App:
             self.ui.show("devices")
         else:
             # if not, show the error message and enable the login frame controls again.
-            self.ui.set_status(f"Can't connect! ({error})", True)
+            self.ui.set_status(f"Can't connect! ({str(error)[:50]})", True)
             self.ui.frames["login"].set_accessibility("normal")
+            if(error_type == "authentication"):
+                # set border of user and password fields to red if the error is authentication related
+                self.ui.frames["login"].txt_password.configure(border_color="red")
+                self.ui.frames["login"].txt_username.configure(border_color="red")
+            elif(error_type == "network" or error_type == "ssh"):
+                # set border of address field to red if the error is network related
+                self.ui.frames["login"].cmbx_sshosts.configure(border_color="red")
 
     def on_model_consoles_loaded(self, consoles):
         """Triggered when the model has loaded the consoles"""
@@ -208,8 +216,12 @@ class App:
     def on_ui_btn_node_tunnel_https(self):
         self.logic.toggle_https_tunnel()
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the application"""
     logger.info("Application started.")
     app = App()
     app.start()  # infinite loop till exit click
     app.on_stop()
+
+if __name__ == "__main__":
+    main()

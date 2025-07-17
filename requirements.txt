@@ -1,4 +1,0 @@
-customtkinter==5.2.2
-paramiko==3.4.0
-CTkMessagebox==2.5
-CTkListbox==1.3

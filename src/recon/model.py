@@ -9,13 +9,36 @@ import subprocess
 import tempfile
 import os
 import pickle
-import util
+from . import util
 
 logger = logging.getLogger("recon.model")
 # paramiko log level can be set to DEBUG for more detailed logging, otherwise it'll follow the root logger level
 # logging.getLogger("paramiko").setLevel(logging.DEBUG)
 
 strList = list[str]
+
+
+class ReConError(Exception):
+    """Base exception for ReCon errors."""
+
+class ReConSSHError(ReConError):
+    """SSH connection or transport error."""
+
+class ReConAuthenticationError(ReConSSHError):
+    """Authentication failed (bad username/password)."""
+
+class ReConNetworkError(ReConSSHError):
+    """Network/socket error (host unreachable, DNS, etc.)."""
+
+class ReConCommandError(ReConError):
+    """Remote command execution error."""
+    def __init__(self, command, exit_code, output, error):
+        super().__init__(f"Command '{command}' failed with exit code {exit_code}")
+        self.command = command
+        self.exit_code = exit_code
+        self.output = output
+        self.error = error
+
 
 class ReCon:
     """
@@ -153,11 +176,24 @@ class ReCon:
         os.close(key_fd)
         rsa_key.write_private_key_file(self._key_file)
 
+        # make sure directory exists
+        ssh_dir = os.path.join(os.path.expanduser(f"C:\\Users\\{self.current_host.username}"), ".ssh")
+        if not os.path.exists(ssh_dir):
+            try:
+                os.makedirs(ssh_dir)
+            except OSError as e:
+                logger.error(f"Failed to create .ssh directory: {e}")
+                self._call_handler("fatal_error", msg="Failed to create .ssh directory. Most features will not work.", error=e)
+                return
+
         # deploy the public key to the remote host
         command = f'echo {key_name} {key} > C:\\Users\\{self.current_host.username}\\.ssh\\authorized_keys'
-        out, err, code = self.execute_command(command)
+        try:
+            out, err, code = self.execute_command(command)
+        except (ReConSSHError, ReConCommandError) as e:
+            logger.error(f"Failed to deploy public key: {e}")
+            self._call_handler("fatal_error", msg="Failed to deploy SSH key. Most features will not work.", error=e)
 
-        
     def bind(self, event, handler):
         """Bind an event to a handler function."""
         self._event_handlers[event] = handler
@@ -167,7 +203,8 @@ class ReCon:
         self._call_handler("initialized")
 
     def _connect(self, host, username, password):
-        """Connect to a host using SSH."""
+        """Connect to a host using SSH. Raises exceptions on failure."""
+
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
             self._activity(f"Connecting to {host}...")
@@ -184,76 +221,106 @@ class ReCon:
 
             self._activity(f"Deploying key...")
             self._deploy_key()
-            self._call_handler("host_establishment", is_ok=True)
-            return True, None
 
-        except (AuthenticationException, TimeoutError, socket.error) as e:
-            # Return a tuple indicating unsuccessful connection (False) and the raised exception
-            return False, e
+        except AuthenticationException as e:
+            logger.error(f"SSH authentication failed: {e}")
+            raise ReConAuthenticationError(str(e)) from e
+        
+        except (TimeoutError, socket.error) as e:
+            logger.error(f"SSH network/socket error: {e}")
+            raise ReConNetworkError(str(e)) from e
+        
+        except SSHException as e:
+            logger.error(f"SSH connection error: {e}")
+            raise ReConSSHError(str(e)) from e
 
-        except Exception as e:
-            type, msg, traceback = sys.exc_info()
-            logger.debug(f"{type} occured @ {traceback.tb_next.tb_frame}. {msg}")
-            return False, e
 
     def execute_command(self, command):
-        """Run the command on the connected host and return the output, error, and exit code."""
-        # SSH command execution code
-        logger.info(f"Sending command via SSH: {command}")
-        stdin, stdout, stderr = self._ssh_client.exec_command(command)
-        output = stdout.read().decode('utf-8')
-        error = stderr.read().decode('utf-8')
-        exit_code = stdout.channel.recv_exit_status()
-        logger.info(f"Response: {output}")
+        try:
+            logger.info(f"Sending command via SSH: {command}")
+            stdin, stdout, stderr = self._ssh_client.exec_command(command)
+            output = stdout.read().decode('utf-8')
+            error = stderr.read().decode('utf-8')
+            exit_code = stdout.channel.recv_exit_status()
+            logger.info(f"Command completed with exit code {exit_code}")
+        except (paramiko.SSHException, socket.error) as e:
+            logger.error(f"SSH error: {e}")
+            raise ReConSSHError(str(e)) from e
+        if exit_code != 0:
+            logger.warning(f"Command '{command}' failed: {error}")
+            raise ReConCommandError(command, exit_code, output, error)
         return output, error, exit_code
 
     def clear_consoles(self):
         """Clear console list"""
-        self.current_host.consoles.clear()
+        if self.current_host is not None and hasattr(self.current_host, 'consoles'):
+            self.current_host.consoles.clear()
 
     def enumerate_consoles(self):
         """Enumerate the available serial consoles on the host."""
         if not self.current_host.consoles:
-            self._activity(f"Enumerating consoles...")
-            output, _, _ = self.execute_command("wmic path Win32_SerialPort get Caption")
-            self.current_host.consoles.extend(com.strip() for com in output.splitlines()[1:] if com)
-            self._save_host_data()
+            self._activity("Enumerating consoles...")
+            try:
+                output, _, _ = self.execute_command("wmic path Win32_SerialPort get Caption")
+                lines = [com.strip() for com in output.splitlines()[1:] if com.strip()]
+                self.current_host.consoles.extend(lines)
+                if lines:
+                    self._activity(f"Found {len(lines)} serial console(s)")
+                else:
+                    self._activity("No serial consoles found")
+                self._save_host_data()
+            except (ReConSSHError, ReConCommandError) as e:
+                self._activity(f"Console enumeration failed: {e}")
         self._call_handler("consoles_loaded", consoles=self.current_host.consoles)
 
     def clear_local_networks(self):
         """Clear local network list"""
-        self.current_host.networks.clear()
+        if self.current_host is not None and hasattr(self.current_host, 'networks'):
+            self.current_host.networks.clear()
 
     def enumerate_local_networks(self):
         """Enumerate the available local networks on the host."""
         if not self.current_host.networks:
             self._activity(f"Enumerating local networks...")
-            output, _, _ = self.execute_command("ipconfig")
-            pattern = r"IPv4 Address\D+(\d+\.\d+\.\d+\.\d+)\r\s+Subnet Mask\D+(\d+\.\d+\.\d+\.\d+)"
-            matches = re.findall(pattern, output)
+            try:
+                output, _, _ = self.execute_command("ipconfig")
+                pattern = r"IPv4 Address\D+(\d+\.\d+\.\d+\.\d+)\r\s+Subnet Mask\D+(\d+\.\d+\.\d+\.\d+)"
+                matches = re.findall(pattern, output)
 
-            for ip,subnet_mask in matches:
-                # Filter out loopback addresses and return the IP addresses of up interfaces
-                ipn = IPv4Network(f"{ip}/{subnet_mask}", False)
-                if ipn.is_private and not(ipn.is_loopback):
-                    self.current_host.networks.append(ipn)
-            self._save_host_data()
+                for ip,subnet_mask in matches:
+                    # Filter out loopback addresses and return the IP addresses of up interfaces
+                    ipn = IPv4Network(f"{ip}/{subnet_mask}", False)
+                    if ipn.is_private and not(ipn.is_loopback):
+                        self.current_host.networks.append(ipn)
+                self._save_host_data()
+            except (ReConSSHError, ReConCommandError) as e:
+                self._activity(f"Local network enumeration failed: {e}")
         self._call_handler("local_networks_loaded", networks=[str(network) for network in self.current_host.networks])
 
     def clear_nodes(self):
         """Clear node list"""
-        self.current_host.nodes.clear()
+        if self.current_host is not None and hasattr(self.current_host, 'nodes'):
+            self.current_host.nodes.clear()
 
     def enumerate_nodes(self):
         """Enumerate the available IP reachable nodes on the host."""
         if not self.current_host.nodes:
+            if not self.current_host.networks:
+                self._activity("No networks available to enumerate nodes.")
+                self._call_handler("nodes_loaded")
+                return
             for host in self.current_host.networks[0].hosts():
                 host = str(host)
                 self._activity(f"Querying... {host}")
-                output, err, exit_code = self.execute_command(f"ping -n 1 -w 25 {host}")
-                if exit_code == 0:
+                try:
+                    output, err, exit_code = self.execute_command(f"ping -n 1 -w 25 {host}")
                     self._call_handler("node_found", node=host)
                     self.current_host.nodes.append(host)
+                except ReConCommandError as e:
+                    # command fail is expected we are scanning for reachable hosts
+                    pass
+                except ReConSSHError as e:
+                    self._activity(f"Node enumeration failed: {e}")
             self._save_host_data()
         else:
             for host in self.current_host.nodes:
@@ -289,8 +356,12 @@ class ReCon:
 
     def spawn_console(self, console):
         """Spawn a console for the specified console name like 'USB to UART Bridge (COM6)'"""
+
         # grab the COMx part from the console name
         match = re.search(r"(COM\d+)", console)
+        if not match:
+            self._activity("No COM port found in console name.")
+            return
         title = f"[ReCon]sole serial {match.group()} on {self.current_host.address}"
         
         # this is the plink command that connects to the serial port
@@ -308,6 +379,7 @@ class ReCon:
         subprocess.Popen(args, creationflags=subprocess.CREATE_NEW_CONSOLE)
 
     def spawn_shell(self):
+        """Spawn a shell console on the current host using powershell."""
         title = f"[ReCon]sole powershell on {self.current_host.address}"
         fcolor = "green"
 
@@ -333,13 +405,30 @@ class ReCon:
         subprocess.run(['taskkill', '/f', '/fi', "WINDOWTITLE eq ReConSole*"])
 
     def setup(self, host, username, password):
-        connected, err = self._connect(host, username, password)
-        if not connected:
-            self._call_handler("host_establishment", is_ok=False, error = err)
+        try:
+            self._connect(host, username, password)
+        except ReConAuthenticationError as err:
+            self._activity(f"Authentication failed: {err}")
+            self._call_handler("host_establishment", is_ok=False, error=err, error_type="authentication")
             return
+        except ReConNetworkError as err:
+            self._activity(f"Network error connecting: {err}")
+            self._call_handler("host_establishment", is_ok=False, error=err, error_type="network")
+            return
+        except ReConSSHError as err:
+            self._activity(f"SSH error connecting: {err}")
+            self._call_handler("host_establishment", is_ok=False, error=err, error_type="ssh")
+            return
+        except Exception as err:
+            self._activity(f"Unexpected error connecting: {err}")
+            self._call_handler("host_establishment", is_ok=False, error=err, error_type="unknown")
+            return
+        
+        self._call_handler("host_establishment", is_ok=True)
         self.enumerate_consoles()
         self.enumerate_local_networks()
-        if self.current_host.nodes:
+        if self.current_host and self.current_host.nodes:
             self.enumerate_nodes()
         return
+
 

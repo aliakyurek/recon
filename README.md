@@ -11,34 +11,56 @@ To install the application, follow the steps below:
   
 ### Prerequisites
 #### Local system
-- Python 3.x installed. (tested with 3.10)
-- openssh client installed.
-- pip package manager installed. (It usually comes bundled with Python.)
-- Internet connection to install dependencies.
+- Python 3.12+ installed
+- **uv** package manager (recommended) OR pip package manager
+- openssh client installed
+- Internet connection to install dependencies
+
 #### Remote system
 - openssh server in the remote system that supports:
   - password authentication
   - port forwarding
-- putty (or just plink) in the remote system.
+- putty (or just plink) in the remote system
 
 ### Steps
-1. Clone the repository or download the source code.
-```git clone <repository_url>```
-2. Navigate to the project directory
-```cd <project_directory>```
-3. Start the application by:
-- For Windows: ```recon```
-- For Linux: Not supported yet.
+
+#### Option 1: Quick Start with UV (Recommended)
+This is the simplest way to get started - `uv` automatically handles virtual environment creation, dependency installation, and script execution:
+
+1. **Install uv** (if not already installed):
+```bash
+# Windows (PowerShell)
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+# or via pip
+pip install uv
+```
+
+2. **Clone the repository:**
+```bash
+git clone <repository_url>
+cd <project_directory>
+```
+
+3. **Run the application:**
+```bash
+uv run recon
+```
+
+That's it! The `uv run recon` command will:
+- Create a virtual environment (if it doesn't exist)
+- Install all dependencies from `pyproject.toml`
+- Execute the application
+
 
 ## Visuals
 ### Splash Screen
-![Image](static/screenshot_01.png)
+![Image](docs/images/screenshot_01.png)
 
 The field labels are self explaining. This is the panel to be used for authenticating to ssh server running on remote PC.
 If any problem occurs during connection attempt, error details will be reported in the bottom right status bar.
 
 ### Remote Screen
-![Image](static/screenshot_02.png)
+![Image](docs/images/screenshot_02.png)
 
 Description of the fields:
 1. Spawn Shell: This will spawn a shell on the remote system.
@@ -49,7 +71,7 @@ Description of the fields:
 6. Refresh Local Networks: This will rescan the local networks of the remote system.
 7. Found nodes: After the first connection established to the remote system, the selected local network will be scanned for possible live nodes. Since this may take some while, a confirmation is asked to user. If accepted, ping scanning will be started and responding IP addresses will be added to the list. The listing is saved to cache for the further sessions.
 
-![Image](static/screenshot_03.png)
+![Image](docs/images/screenshot_03.png)
 
 8. Node: A node found during scan will be represented in the listbox.
 9. Refresh nodes: This will rescan the local network of the remote system for possible live nodes.
@@ -57,11 +79,11 @@ Description of the fields:
 ### Spawned Command Shell
 The spawned serial console window looks like as the following. It can be closed with window closing button or "exit" command.
 
-![Image](static/screenshot_05.png)
+![Image](docs/images/screenshot_05.png)
 ### Spawned Serial Console
 The spawned serial console window looks like as the following. It can be closed with window closing button or CTRL+C.
 
-![Image](static/screenshot_04.png)
+![Image](docs/images/screenshot_04.png)
 ## Contact
 For problems, ideas, discussions etc. You may contact me at aliakyurek@gmail.com
 ## Roadmap

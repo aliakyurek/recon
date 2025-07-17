@@ -2,10 +2,166 @@ from customtkinter import (
     CTk, CTkFrame, CTkLabel,
     CTkEntry, CTkButton, CTkComboBox,
     set_appearance_mode, set_default_color_theme,
-    ThemeManager
+    ThemeManager, CTkImage
 )
 from CTkListbox import CTkListbox
-import util
+from PIL import Image
+from . import util
+
+
+class MultiButtonListbox(CTkFrame):
+    """
+    A custom listbox that supports multiple buttons per row.
+    This class extends CTkFrame to create a scrollable list with multiple buttons on each line.
+    Maintains compatibility with original CTkListbox interface.
+    """
+    
+    def __init__(self, parent, button_color="#1F6AA5", hover_color="#3D81FF", 
+                 highlight_color="#3D81FF", height=200, **kwargs):
+        super().__init__(parent, **kwargs)
+        
+        # Store colors and settings
+        self.button_color = button_color
+        self.hover_color = hover_color
+        self.highlight_color = highlight_color
+        self.height = height
+        
+        # Dictionary to store row data: {row_key: {'frame': CTkFrame, 'buttons': [CTkButton, ...]}}
+        self.rows = {}
+        self.selected_row = None
+        
+        # Compatibility with original CTkListbox - buttons dictionary
+        self.buttons = {}
+        
+        # Create scrollable frame
+        self.scrollable_frame = CTkFrame(self)
+        self.scrollable_frame.pack(fill="both", expand=True, padx=2, pady=2)
+        
+        # Configure grid for scrollable content
+        self.scrollable_frame.grid_columnconfigure(0, weight=1)
+        
+        # Row counter for grid positioning
+        self.row_counter = 0
+    
+    def insert(self, key, text_or_config, height=20):
+        """
+        Insert a new row with button(s).
+        
+        Args:
+            key: Unique identifier for the row
+            text_or_config: Either a string (for single button) or list of dicts for multiple buttons
+            height: Height of the row
+        """
+        if key in self.rows:
+            return  # Row already exists
+        
+        # Create frame for this row
+        row_frame = CTkFrame(self.scrollable_frame, height=height)
+        row_frame.grid(row=self.row_counter, column=0, sticky="ew", pady=(0, 1))
+        
+        # Handle different input types
+        if isinstance(text_or_config, str):
+            # Single button mode (compatible with original)
+            buttons_config = [{'text': text_or_config, 'command': None}]
+        elif isinstance(text_or_config, list):
+            # Multiple buttons mode
+            buttons_config = text_or_config
+        else:
+            buttons_config = [{'text': str(text_or_config), 'command': None}]
+        
+        # Create buttons for this row
+        buttons = []
+        for i, btn_config in enumerate(buttons_config):
+            # Get button width, default to None for auto-sizing
+            btn_width = btn_config.get('width', None)
+            btn_text = btn_config.get('text', '')
+            btn_command = btn_config.get('command', None)
+            btn_image = btn_config.get('image', None)
+            
+            # Create button with or without width parameter
+            if btn_width is not None:
+                btn = CTkButton(
+                    row_frame,
+                    text=btn_text,
+                    command=btn_command,
+                    fg_color=self.button_color,
+                    hover_color=self.hover_color,
+                    height=height-4,
+                    width=btn_width,
+                    image=btn_image
+                )
+            else:
+                btn = CTkButton(
+                    row_frame,
+                    text=btn_text,
+                    command=btn_command,
+                    fg_color=self.button_color,
+                    hover_color=self.hover_color,
+                    height=height-4,
+                    image=btn_image
+                )
+            
+            # Configure grid weights based on button width
+            if btn_width is None:
+                # Auto-width buttons get more weight (expand to fill space)
+                btn.grid(row=0, column=i, padx=(2, 2), pady=2, sticky="ew")
+                row_frame.grid_columnconfigure(i, weight=1)
+            else:
+                # Fixed-width buttons get no weight (stay at specified width)
+                btn.grid(row=0, column=i, padx=(2, 2), pady=2)
+                row_frame.grid_columnconfigure(i, weight=0)
+            
+            buttons.append(btn)
+        
+        # Store row data
+        self.rows[key] = {
+            'frame': row_frame,
+            'buttons': buttons,
+            'row_index': self.row_counter
+        }
+        
+        # Compatibility: store first button in buttons dict
+        if buttons:
+            self.buttons[key] = buttons[0]
+        
+        self.row_counter += 1
+    
+    def delete(self, key_or_all):
+        """Delete a row by key or all rows."""
+        if key_or_all == "all":
+            self.delete_all()
+        elif key_or_all in self.rows:
+            self.rows[key_or_all]['frame'].destroy()
+            if key_or_all in self.buttons:
+                del self.buttons[key_or_all]
+            del self.rows[key_or_all]
+    
+    def delete_all(self):
+        """Delete all rows."""
+        for key in list(self.rows.keys()):
+            self.rows[key]['frame'].destroy()
+        self.rows.clear()
+        self.buttons.clear()
+        self.row_counter = 0
+    
+    def get(self):
+        """Get the selected row key (compatibility method)."""
+        return self.selected_row
+    
+    def set_selected(self, key):
+        """Set the selected row."""
+        self.selected_row = key
+    
+    def get_row_buttons(self, key):
+        """Get buttons for a specific row."""
+        if key in self.rows:
+            return self.rows[key]['buttons']
+        return []
+    
+    def get_all_rows(self):
+        """Get all row keys."""
+        return list(self.rows.keys())
+
 
 def center_window(Screen: CTk, width: int, height: int, scale_factor: float = 1.0):
     """Centers the window to the main display/monitor"""
@@ -83,7 +239,11 @@ class LoginFrame(CTkFrame):
         for k,v in self.children.items():
             # skip internal widgets (they have !ctkkanvas in their name) and only enable/disable our widgets.
             if k != "!ctkcanvas":
-                v.configure(state=val)
+                try:
+                    v.configure(state=val)
+                except Exception:
+                    # Some widgets might not support state parameter
+                    pass
 
 
 class DeviceFrame(CTkFrame):
@@ -152,6 +312,19 @@ class DeviceFrame(CTkFrame):
         """
         self.lbx_nodes.insert(node, node, height=20)
         self.lbx_nodes.buttons[node].pack_configure(pady=(0,1))
+    
+    def _on_node_select(self, node):
+        """Handle node selection."""
+        self.lbx_nodes.set_selected(node)
+        print(f"Node selected: {node}")
+    
+    def _on_ssh_click(self, node):
+        """Handle SSH button click."""
+        print(f"SSH clicked for node: {node}")
+    
+    def _on_web_click(self, node):
+        """Handle Web button click."""
+        print(f"Web clicked for node: {node}")
 
     def extend_lbx_nodes(self, node_port_map, handler):
         """
@@ -191,7 +364,7 @@ class RcUI(CTk):
         show(self, frame): Shows the specified frame in the UI.
     """
 
-    ICO_PATH = util.get_static_path("static/app.ico")
+    ICO_PATH = util.get_static_path("app.ico")
     def __init__(self, title):
         super().__init__()
         self.frames = {}
